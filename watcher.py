@@ -7,6 +7,7 @@ import pandas as pd
 
 MSOS_HOLDINGS_CSV_URL = "https://advisorshares.com/wp-content/uploads/csv/holdings/AdvisorShares_MSOS_Holdings_File.csv"
 TABLE_NAME = "Holdings"
+MARKET_CLOSE_HOUR = 16
 
 
 def main():
@@ -36,8 +37,18 @@ def update_holdings():
 
 def calculate_deltas():
     holdings = get_holdings_between_today_and_previous()
+    tickers = get_distinct_tickers(holdings)
+    for ticker in tickers:
+        print(ticker)
+
+
+def get_distinct_tickers(holdings):
+    tickers = []
     for position in holdings:
-        print(position)
+        ticker = position['ticker']
+        if tickers[ticker] is None:
+            tickers.append(ticker)
+    return tickers
 
 
 def get_holdings_between_today_and_previous():
@@ -55,8 +66,10 @@ def get_holdings_between_today_and_previous():
 
 def get_previous_trading_day(date):
     previous_trading_day = date - timedelta(days=1)
+    if datetime.now().hour > MARKET_CLOSE_HOUR:
+        previous_trading_day = date
     friday_week_index = 4
-    while datetime.weekday(previous_trading_day) <= friday_week_index:
+    while datetime.weekday(previous_trading_day) >= friday_week_index:
         previous_trading_day = previous_trading_day - timedelta(days=1)
     return previous_trading_day
 

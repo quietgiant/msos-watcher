@@ -9,10 +9,10 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 
-AWS_REIGON = os.environ['AWS_REGION']
-AWS_PRIVATE_KEY = os.environ['AWS_PRIVATE_KEY']
-AWS_SECRET_KEY = os.environ['AWS_SECRET_KEY']
-SLACK_API_TOKEN = os.environ['SLACK_TOKEN']
+# AWS_REIGON = os.environ['AWS_REGION']
+# AWS_PRIVATE_KEY = os.environ['AWS_PRIVATE_KEY']
+# AWS_SECRET_KEY = os.environ['AWS_SECRET_KEY']
+SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
 
 MSOS_HOLDINGS_CSV_URL = "https://advisorshares.com/wp-content/uploads/csv/holdings/AdvisorShares_MSOS_Holdings_File.csv"
 TABLE_NAME = "Holdings"
@@ -28,15 +28,12 @@ def main():
 
 def post_message_to_slack(diff):
     client = WebClient(token=SLACK_API_TOKEN)
-    channel_id = "C02M5HJA90X"
     response = client.conversations_list()
     conversations = response["channels"]
-    print(conversations)
-    channel = [c for c in conversations if c["name"] == TARGET_CHANNEL_NAME]
-    print(channel)
+    channel = [c for c in conversations if c["name"] == TARGET_CHANNEL_NAME][0]
     try:
         result = client.chat_postMessage(
-            channel=channel.id,
+            channel=channel['id'],
             blocks=[
                 {
                     "type": "section",
@@ -71,7 +68,7 @@ def post_message_to_slack(diff):
         )
         print(result)
     except SlackApiError as e:
-        print(f"Error: {e}")
+        print(f"Slack API error: {e}")
 
 
 def update_holdings():

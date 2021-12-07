@@ -9,47 +9,38 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 
-# AWS_REIGON = os.environ['AWS_REGION']
-# AWS_PRIVATE_KEY = os.environ['AWS_PRIVATE_KEY']
-# AWS_SECRET_KEY = os.environ['AWS_SECRET_KEY']
-SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
-
 MSOS_HOLDINGS_CSV_URL = "https://advisorshares.com/wp-content/uploads/csv/holdings/AdvisorShares_MSOS_Holdings_File.csv"
 TABLE_NAME = "Holdings"
-TARGET_CHANNEL_NAME = "msos-watcher"
+SLACK_TARGET_CHANNEL_NAME = "msos-watcher"
+SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
 
 
 def main():
-    # update_holdings()
+    update_holdings()
     diff = calculate_deltas()
-    print(diff)
     post_message_to_slack(diff)
 
 
 def post_message_to_slack(diff):
     client = WebClient(token=SLACK_API_TOKEN)
-    response = client.conversations_list()
-    conversations = response["channels"]
-    channel = [c for c in conversations if c["name"] == TARGET_CHANNEL_NAME][0]
+    channels = client.conversations_list()["channels"]
+    slack_channel = [c for c in channels if c["name"] == SLACK_TARGET_CHANNEL_NAME][0]
     try:
         now = datetime.now()
         previous_trading_day = get_previous_trading_day(now)
         trading_day_before_previous = get_previous_trading_day(previous_trading_day)
-
         ticker_output_col = ""
         share_delta_output_col = ""
-
         diff = diff.sort_values('share_delta', ascending=False)
 
         for (index, position) in diff.iterrows():
             ticker_output_col += f"{position['ticker']}\n"
             share_delta_output_col += concatenate_share_delta(position)
 
-        print(ticker_output_col)
-        print(share_delta_output_col)
         result = client.chat_postMessage(
-            channel=channel['id'],           
-            blocks=[
+            channel = slack_channel['id'],           
+            text = "MSOS Holding Changes",
+            blocks = [
                 {
                     "type": "section",
                     "text": {
@@ -63,7 +54,7 @@ def post_message_to_slack(diff):
                         },
                         {
                             "type": "mrkdwn",
-                            "text": "*Share Delta*"
+                            "text": "*Delta*"
                         },
                         {
                             "type": "mrkdwn",
@@ -84,7 +75,6 @@ def post_message_to_slack(diff):
 def update_holdings():
     holdings = pd.read_csv(MSOS_HOLDINGS_CSV_URL).rename(columns=lambda x: x.strip()).dropna(how="all")
     today_date = holdings.iloc[0]["Date"]
-    print(today_date)
     for (index, position) in holdings.iterrows():
         ticker = get_ticker(position)
         row = {
@@ -103,15 +93,12 @@ def update_holdings():
 def calculate_deltas():
     now = datetime.now()
     previous_trading_day = get_previous_trading_day(now)
-    print(f"previous_trading_day: {previous_trading_day}")
     trading_day_before_previous = get_previous_trading_day(previous_trading_day)
-    print(f"trading_day_before_previous: {trading_day_before_previous}")
 
     holdings = get_holdings_for_dates(previous_trading_day, trading_day_before_previous)
     tickers = get_distinct_tickers(holdings)
     deltas = []
     for ticker in tickers:
-        print(ticker)
         position_deltas = [h for h in holdings if h['ticker'] == ticker]
         if len(position_deltas) != 2:
             print("new position or exit position")
@@ -119,11 +106,7 @@ def calculate_deltas():
             continue
         current_position = [p for p in position_deltas if p['date'] == format_date(previous_trading_day)][0]
         previous_position = [p for p in position_deltas if p['date'] == format_date(trading_day_before_previous)][0]
-        print(current_position)
-        print(previous_position)
         share_delta = calculate_share_delta(current_position, previous_position)
-        print(share_delta)
-        print("\n\n")
         deltas.append([ticker, share_delta])
     return pd.DataFrame(deltas, columns=["ticker", "share_delta"])
 
@@ -148,6 +131,7 @@ def money_str(s):
     if s is None:
         return 'N/A'
     return "${:,.2f}".format(float(s))
+
 
 def share_str(s):
     if s is None:
@@ -180,7 +164,6 @@ def get_holdings_for_dates(day1, day2):
 
 
 def get_previous_trading_day(date):
-    print(date)
     previous_trading_day = date - timedelta(days=1)
     friday_week_index = 4
     while datetime.weekday(previous_trading_day) > friday_week_index:

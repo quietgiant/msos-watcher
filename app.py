@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import timedelta, datetime
+from datetime import date, timedelta, datetime
 from decimal import Decimal
 import pandas as pd
 import boto3
@@ -32,41 +32,51 @@ def post_message_to_slack(diff):
     conversations = response["channels"]
     channel = [c for c in conversations if c["name"] == TARGET_CHANNEL_NAME][0]
     try:
+        now = datetime.now()
+        previous_trading_day = get_previous_trading_day(now)
+        trading_day_before_previous = get_previous_trading_day(previous_trading_day)
+
+        ticker_output_col = ""
+        share_delta_output_col = ""
+
+        diff = diff.sort_values('share_delta', ascending=False)
+
+        for (index, position) in diff.iterrows():
+            ticker_output_col += f"{position['ticker']}\n"
+            share_delta_output_col += concatenate_share_delta(position)
+
+        print(ticker_output_col)
+        print(share_delta_output_col)
         result = client.chat_postMessage(
-            channel=channel['id'],
+            channel=channel['id'],           
             blocks=[
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "Danny Torrence left the following review for your property:"
-                    }
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "<https://example.com|Overlook Hotel> \n :star: \n Doors had too many axe holes, guest in room " +
-                        "237 was far too rowdy, whole place felt stuck in the 1920s."
+                        "text": f"*MSOS Holdings*\n*Changes from {format_date(trading_day_before_previous)} to {format_date(previous_trading_day)}*"
                     },
-                    "accessory": {
-                        "type": "image",
-                        "image_url": "https://images.pexels.com/photos/750319/pexels-photo-750319.jpeg",
-                        "alt_text": "Haunted hotel image"
-                    }
-                },
-                {
-                    "type": "section",
                     "fields": [
                         {
                             "type": "mrkdwn",
-                            "text": "*Average Rating*\n1.0"
+                            "text": "*Ticker*"
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": "*Share Delta*"
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": ticker_output_col
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": share_delta_output_col
                         }
                     ]
                 }
             ]
         )
-        print(result)
     except SlackApiError as e:
         print(f"Slack API error: {e}")
 
@@ -88,17 +98,16 @@ def update_holdings():
         data = json.loads(json.dumps(row), parse_float=Decimal)
         print(data)
         write(data)
-    print_all()
 
 
 def calculate_deltas():
     now = datetime.now()
-    today = format_date(now)
-    print(f"today: {today}")
-    previous_trading_day = format_date(get_previous_trading_day(now))
-    print(f"prev session: {previous_trading_day}")
+    previous_trading_day = get_previous_trading_day(now)
+    print(f"previous_trading_day: {previous_trading_day}")
+    trading_day_before_previous = get_previous_trading_day(previous_trading_day)
+    print(f"trading_day_before_previous: {trading_day_before_previous}")
 
-    holdings = get_holdings_for_dates(today, previous_trading_day)
+    holdings = get_holdings_for_dates(previous_trading_day, trading_day_before_previous)
     tickers = get_distinct_tickers(holdings)
     deltas = []
     for ticker in tickers:
@@ -106,9 +115,10 @@ def calculate_deltas():
         position_deltas = [h for h in holdings if h['ticker'] == ticker]
         if len(position_deltas) != 2:
             print("new position or exit position")
+            print(position_deltas[0]['shares'])
             continue
-        current_position = [p for p in position_deltas if p['date'] == today][0]
-        previous_position = [p for p in position_deltas if p['date'] == previous_trading_day][0]
+        current_position = [p for p in position_deltas if p['date'] == format_date(previous_trading_day)][0]
+        previous_position = [p for p in position_deltas if p['date'] == format_date(trading_day_before_previous)][0]
         print(current_position)
         print(previous_position)
         share_delta = calculate_share_delta(current_position, previous_position)
@@ -120,8 +130,29 @@ def calculate_deltas():
 
 def calculate_share_delta(current_position, previous_position):
     current_shares = float(format_shares_float(current_position['shares']))
-    previous_shares = float(format_shares_float(current_position['shares']))
+    previous_shares = float(format_shares_float(previous_position['shares']))
     return current_shares - previous_shares
+
+
+def concatenate_share_delta(position):
+    cash_tickers = [
+        "CASH", 
+        "BLACKROCK TREASURY TRUST INSTL 62"
+    ]
+    if position["ticker"] in cash_tickers:
+        return f"{money_str(position['share_delta'])}\n"
+    return f"{share_str(position['share_delta'])}\n"
+
+
+def money_str(s):
+    if s is None:
+        return 'N/A'
+    return "${:,.2f}".format(float(s))
+
+def share_str(s):
+    if s is None:
+        return 'N/A'
+    return "{:d}".format(int(s))
 
 
 def format_shares_float(shares):
@@ -140,24 +171,25 @@ def get_distinct_tickers(holdings):
     return tickers
 
 
-def get_holdings_for_dates(today, previous_trading_day):
+def get_holdings_for_dates(day1, day2):
     holdings_table = get_holdings_table()
     rows = holdings_table.scan(
-        FilterExpression=Attr('date').eq(today) | Attr('date').eq(previous_trading_day)
+        FilterExpression=Attr('date').eq(format_date(day1)) | Attr('date').eq(format_date(day2))
     )
     return rows['Items']
 
 
 def get_previous_trading_day(date):
+    print(date)
     previous_trading_day = date - timedelta(days=1)
     friday_week_index = 4
-    while datetime.weekday(previous_trading_day) >= friday_week_index:
+    while datetime.weekday(previous_trading_day) > friday_week_index:
         previous_trading_day = previous_trading_day - timedelta(days=1)
     return previous_trading_day
 
 
 def format_date(date):
-    return datetime.strftime(date, '%m/%d/%Y')
+    return datetime.strftime(date, '%m/%-d/%Y')
 
 
 def get_ticker(row):

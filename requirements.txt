@@ -1,3 +1,4 @@
 boto3
 pandas
 slack_sdk
+python-dotenv

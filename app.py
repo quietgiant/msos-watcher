@@ -1,18 +1,29 @@
-import os
-import json
-from datetime import date, timedelta, datetime
-from decimal import Decimal
-import pandas as pd
-import boto3
-from boto3.dynamodb.conditions import Attr
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
+try:
+    import os
+    import json
+    from datetime import timedelta, datetime
+    from decimal import Decimal
+    import pandas as pd
+    import boto3
+    from boto3.dynamodb.conditions import Attr
+    from slack_sdk import WebClient
+    from slack_sdk.errors import SlackApiError
+    from dotenv import load_dotenv
+except Exception as ex:
+    print("Error Imports : {} ".format(ex))
 
+
+load_dotenv()
+print(os.environ)
 
 MSOS_HOLDINGS_CSV_URL = "https://advisorshares.com/wp-content/uploads/csv/holdings/AdvisorShares_MSOS_Holdings_File.csv"
 TABLE_NAME = "Holdings"
 SLACK_TARGET_CHANNEL_NAME = "msos-watcher"
 SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
+
+
+def handler(event, context):
+    main()
 
 
 def main():
@@ -28,7 +39,6 @@ def post_message_to_slack(diff):
     try:
         now = datetime.now()
         previous_trading_day = get_previous_trading_day(now)
-        trading_day_before_previous = get_previous_trading_day(previous_trading_day)
         ticker_output_col = ""
         share_delta_output_col = ""
         diff = diff.sort_values('share_delta', ascending=False)
@@ -38,14 +48,14 @@ def post_message_to_slack(diff):
             share_delta_output_col += concatenate_share_delta(position)
 
         result = client.chat_postMessage(
-            channel = slack_channel['id'],           
-            text = "MSOS Holding Changes",
-            blocks = [
+            channel=slack_channel['id'],
+            text="MSOS Holding Changes",
+            blocks=[
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*MSOS Holdings*\n*Changes from {format_date(trading_day_before_previous)} to {format_date(previous_trading_day)}*"
+                        "text": f"*MSOS Holdings*\n*Changes from {format_date(previous_trading_day)} to {format_date(now)}*"
                     },
                     "fields": [
                         {
@@ -86,26 +96,29 @@ def update_holdings():
             "weight": position["Portfolio Weight %"]
         }
         data = json.loads(json.dumps(row), parse_float=Decimal)
-        print(data)
-        write(data)
+        if valid_row(data):
+            print(data)
+            write(data)
 
 
 def calculate_deltas():
     now = datetime.now()
     previous_trading_day = get_previous_trading_day(now)
-    trading_day_before_previous = get_previous_trading_day(previous_trading_day)
 
-    holdings = get_holdings_for_dates(previous_trading_day, trading_day_before_previous)
+    holdings = get_holdings_for_dates(now, previous_trading_day)
     tickers = get_distinct_tickers(holdings)
     deltas = []
     for ticker in tickers:
         position_deltas = [h for h in holdings if h['ticker'] == ticker]
+        current_position = 0
+        previous_position = 0
         if len(position_deltas) != 2:
-            print("new position or exit position")
+            print(f"new position or exit position for {ticker}")
             print(position_deltas[0]['shares'])
-            continue
-        current_position = [p for p in position_deltas if p['date'] == format_date(previous_trading_day)][0]
-        previous_position = [p for p in position_deltas if p['date'] == format_date(trading_day_before_previous)][0]
+            current_position = position_deltas[0]
+        else:
+            current_position = [p for p in position_deltas if p['date'] == format_date(previous_trading_day)][0]
+            previous_position = [p for p in position_deltas if p['date'] == format_date(previous_trading_day)][0]
         share_delta = calculate_share_delta(current_position, previous_position)
         deltas.append([ticker, share_delta])
     return pd.DataFrame(deltas, columns=["ticker", "share_delta"])
@@ -113,13 +126,15 @@ def calculate_deltas():
 
 def calculate_share_delta(current_position, previous_position):
     current_shares = float(format_shares_float(current_position['shares']))
-    previous_shares = float(format_shares_float(previous_position['shares']))
+    previous_shares = 0
+    if (previous_position):
+        previous_shares = float(format_shares_float(previous_position['shares']))
     return current_shares - previous_shares
 
 
 def concatenate_share_delta(position):
     cash_tickers = [
-        "CASH", 
+        "CASH",
         "BLACKROCK TREASURY TRUST INSTL 62"
     ]
     if position["ticker"] in cash_tickers:
@@ -136,7 +151,12 @@ def money_str(s):
 def share_str(s):
     if s is None:
         return 'N/A'
-    return "{:d}".format(int(s))
+    num = int(float(s))
+    status = '+'
+    if num < 0:
+        status = '-'
+    result = "{:,d}".format(num)
+    return result
 
 
 def format_shares_float(shares):
@@ -172,7 +192,7 @@ def get_previous_trading_day(date):
 
 
 def format_date(date):
-    return datetime.strftime(date, '%m/%-d/%Y')
+    return datetime.strftime(date, '%-m/%-d/%Y')
 
 
 def get_ticker(row):
@@ -180,8 +200,14 @@ def get_ticker(row):
     return ticker if ticker != "" and ticker != "nan" else row["Security Description"]
 
 
+def valid_row(row):
+    if '-' in row['shares']:
+        return False
+    return True
+
+
 def print_all():
-    dynamodb = boto3.resource("dynamodb")
+    dynamodb = get_dynamodb()
     holdings_table = dynamodb.Table(TABLE_NAME)
     all_rows = holdings_table.scan()
     print(all_rows)
@@ -193,8 +219,14 @@ def write(data):
 
 
 def get_holdings_table():
-    dynamodb = boto3.resource("dynamodb")
+    dynamodb = get_dynamodb()
     return dynamodb.Table(TABLE_NAME)
+
+
+def get_dynamodb():
+    return boto3.resource("dynamodb",
+                          aws_access_key_id=os.environ['AWS_ACCESS_KEY'],
+                          aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'])
 
 
 if __name__ == "__main__":

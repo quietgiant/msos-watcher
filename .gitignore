@@ -1,1 +1,3 @@
-config.sh
+.env
+run.sh
+deploy.sh

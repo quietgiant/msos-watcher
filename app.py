@@ -14,7 +14,6 @@ except Exception as ex:
 
 
 load_dotenv()
-print(os.environ)
 
 MSOS_HOLDINGS_CSV_URL = "https://advisorshares.com/wp-content/uploads/csv/holdings/AdvisorShares_MSOS_Holdings_File.csv"
 TABLE_NAME = "Holdings"
@@ -41,22 +40,30 @@ def post_message_to_slack(diff):
         previous_trading_day = get_previous_trading_day(now)
         ticker_output_col = ""
         share_delta_output_col = ""
+        pct_change_output_col = ""
         diff = diff.sort_values('share_delta', ascending=False)
 
         for (index, position) in diff.iterrows():
             ticker_output_col += f"{position['ticker']}\n"
             share_delta_output_col += concatenate_share_delta(position)
+            pct_change_output_col = concatenate_pct_change(position)
 
         result = client.chat_postMessage(
             channel=slack_channel['id'],
             text="MSOS Holding Changes",
             blocks=[
+                 {
+                     "type": "header",
+                     "text": {
+                         "type": "plain_text",
+                         "text": f"MSOS Holdings\nChanges from {format_date(previous_trading_day)} to {format_date(now)}"
+                     }
+                 },
+                {
+                     "type": "divider"
+                 },
                 {
                     "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"*MSOS Holdings*\n*Changes from {format_date(previous_trading_day)} to {format_date(now)}*"
-                    },
                     "fields": [
                         {
                             "type": "mrkdwn",
@@ -75,7 +82,16 @@ def post_message_to_slack(diff):
                             "text": share_delta_output_col
                         }
                     ]
-                }
+                 },
+                {
+                     "type": "context",
+                     "elements": [
+                         {
+                             "type": "mrkdwn",
+                             "text": f"<{MSOS_HOLDINGS_CSV_URL}|Source>"
+                         }
+                     ]
+                 }
             ]
         )
     except SlackApiError as e:
@@ -120,8 +136,11 @@ def calculate_deltas():
             current_position = [p for p in position_deltas if p['date'] == format_date(previous_trading_day)][0]
             previous_position = [p for p in position_deltas if p['date'] == format_date(previous_trading_day)][0]
         share_delta = calculate_share_delta(current_position, previous_position)
-        deltas.append([ticker, share_delta])
-    return pd.DataFrame(deltas, columns=["ticker", "share_delta"])
+        pct_change = 0
+        if (current_position != 0 and previous_position != 0):
+            pct_change = current_position / previous_position
+        deltas.append([ticker, share_delta, pct_change])
+    return pd.DataFrame(deltas, columns=["ticker", "share_delta", "pct_change"])
 
 
 def calculate_share_delta(current_position, previous_position):
@@ -140,6 +159,12 @@ def concatenate_share_delta(position):
     if position["ticker"] in cash_tickers:
         return f"{money_str(position['share_delta'])}\n"
     return f"{share_str(position['share_delta'])}\n"
+
+
+def concatenate_pct_change(position):
+    if position['pct_change'] != 0:
+        return f"{position['pct_change']}\n"
+    return ""
 
 
 def money_str(s):
@@ -224,9 +249,7 @@ def get_holdings_table():
 
 
 def get_dynamodb():
-    return boto3.resource("dynamodb",
-                          aws_access_key_id=os.environ['AWS_ACCESS_KEY'],
-                          aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'])
+    return boto3.resource("dynamodb")
 
 
 if __name__ == "__main__":

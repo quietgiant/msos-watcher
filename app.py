@@ -20,6 +20,11 @@ TABLE_NAME = "Holdings"
 SLACK_TARGET_CHANNEL_NAME = "msos-watcher"
 SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
 
+CASH_TICKERS = [
+    "CASH",
+    "BLACKROCK TREASURY TRUST INSTL 62"
+]
+
 
 def handler(event, context):
     main()
@@ -40,13 +45,17 @@ def post_message_to_slack(diff):
         previous_trading_day = get_previous_trading_day(now)
         ticker_output_col = ""
         share_delta_output_col = ""
-        pct_change_output_col = ""
         diff = diff.sort_values('share_delta', ascending=False)
+        cash = diff.query('ticker == "BLACKROCK TREASURY TRUST INSTL 62"').iloc[0]
+        cash_pct = cash['weight']
+        cash_dollars = cash['shares']
 
         for (index, position) in diff.iterrows():
+            if (position['ticker'] in CASH_TICKERS):
+                diff.drop(index, inplace=True)
+                continue
             ticker_output_col += f"{position['ticker']}\n"
             share_delta_output_col += concatenate_share_delta(position)
-            pct_change_output_col = concatenate_pct_change(position)
 
         result = client.chat_postMessage(
             channel=slack_channel['id'],
@@ -81,6 +90,23 @@ def post_message_to_slack(diff):
                             "type": "mrkdwn",
                             "text": share_delta_output_col
                         }
+
+                    ]
+                 },
+                {
+                     "type": "divider"
+                 },
+                {
+                    "type": "section",
+                    "fields": [
+                        {
+                            "type": "mrkdwn",
+                            "text": "*Cash*"
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f'${cash_dollars} ({cash_pct})'
+                        }
                     ]
                  },
                 {
@@ -94,8 +120,10 @@ def post_message_to_slack(diff):
                  }
             ]
         )
-    except SlackApiError as e:
-        print(f"Slack API error: {e}")
+    except SlackApiError as slackError:
+        print(f"Slack API error: {slackError}")
+    except Exception as ex:
+        print(ex)
 
 
 def update_holdings():
@@ -129,18 +157,19 @@ def calculate_deltas():
         current_position = 0
         previous_position = 0
         if len(position_deltas) != 2:
-            print(f"new position or exit position for {ticker}")
-            print(position_deltas[0]['shares'])
             current_position = position_deltas[0]
         else:
-            current_position = [p for p in position_deltas if p['date'] == format_date(previous_trading_day)][0]
+            current_position = [p for p in position_deltas if p['date'] == format_date(now)][0]
             previous_position = [p for p in position_deltas if p['date'] == format_date(previous_trading_day)][0]
         share_delta = calculate_share_delta(current_position, previous_position)
         pct_change = 0
         if (current_position != 0 and previous_position != 0):
-            pct_change = current_position / previous_position
-        deltas.append([ticker, share_delta, pct_change])
-    return pd.DataFrame(deltas, columns=["ticker", "share_delta", "pct_change"])
+            pct_change = (float(format_shares_float(
+                current_position['shares'])) / float(format_shares_float(previous_position['shares']))) - 1
+        weight = current_position['weight']
+        shares = current_position['shares']
+        deltas.append([ticker, share_delta, pct_change, weight, shares])
+    return pd.DataFrame(deltas, columns=["ticker", "share_delta", "pct_change", "weight", "shares"])
 
 
 def calculate_share_delta(current_position, previous_position):
@@ -152,36 +181,35 @@ def calculate_share_delta(current_position, previous_position):
 
 
 def concatenate_share_delta(position):
-    cash_tickers = [
-        "CASH",
-        "BLACKROCK TREASURY TRUST INSTL 62"
-    ]
-    if position["ticker"] in cash_tickers:
-        return f"{money_str(position['share_delta'])}\n"
-    return f"{share_str(position['share_delta'])}\n"
-
-
-def concatenate_pct_change(position):
+    result = f"{share_str(position['share_delta'])}"
     if position['pct_change'] != 0:
-        return f"{position['pct_change']}\n"
-    return ""
+        result += f" ({pct_str(position['pct_change'])})"
+    elif position['pct_change'] == 0 and position['share_delta'] != 0:
+        result += " (new position)"
+    return f"{result}\n"
 
 
 def money_str(s):
-    if s is None:
-        return 'N/A'
-    return "${:,.2f}".format(float(s))
+    return 'N/A' if s is None else "${:,.2f}".format(float(s))
 
 
 def share_str(s):
     if s is None:
         return 'N/A'
     num = int(float(s))
-    status = '+'
-    if num < 0:
-        status = '-'
+    status = ''
+    if num > 0:
+        status = '+'
     result = "{:,d}".format(num)
-    return result
+    return f"{status}{result}"
+
+
+def pct_str(s):
+    result = round(s * 100, 3)
+    status = ''
+    if result > 0:
+        status = '+'
+    return f"{status}{result}%"
 
 
 def format_shares_float(shares):
@@ -226,9 +254,7 @@ def get_ticker(row):
 
 
 def valid_row(row):
-    if '-' in row['shares']:
-        return False
-    return True
+    return '-' in row['shares']
 
 
 def print_all():

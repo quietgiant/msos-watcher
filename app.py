@@ -3,6 +3,7 @@ try:
     import json
     from datetime import timedelta, datetime
     from decimal import Decimal
+    import pytz
     import pandas as pd
     import boto3
     from boto3.dynamodb.conditions import Attr
@@ -41,7 +42,7 @@ def post_message_to_slack(diff):
     channels = client.conversations_list()["channels"]
     slack_channel = [c for c in channels if c["name"] == SLACK_TARGET_CHANNEL_NAME][0]
     try:
-        now = datetime.now()
+        now = get_now_est()
         previous_trading_day = get_previous_trading_day(now)
         ticker_output_col = ""
         share_delta_output_col = ""
@@ -146,7 +147,7 @@ def update_holdings():
 
 
 def calculate_deltas():
-    now = datetime.now()
+    now = get_now_est()
     previous_trading_day = get_previous_trading_day(now)
 
     holdings = get_holdings_for_dates(now, previous_trading_day)
@@ -246,6 +247,11 @@ def get_previous_trading_day(date):
 
 def format_date(date):
     return datetime.strftime(date, '%-m/%-d/%Y')
+
+
+def get_now_est():
+    est = pytz.timezone('EST')
+    return datetime.now(est)
 
 
 def get_ticker(row):

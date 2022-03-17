@@ -260,7 +260,7 @@ def get_ticker(row):
 
 
 def valid_row(row):
-    return '-' in row['shares']
+    return '-' not in row['shares']
 
 
 def print_all():

@@ -34,7 +34,7 @@ def handler(event, context):
 def main():
     update_holdings()
     diff = calculate_deltas()
-    post_message_to_slack(diff)
+    _ = post_message_to_slack(diff)
 
 
 def post_message_to_slack(diff):
@@ -58,20 +58,35 @@ def post_message_to_slack(diff):
             ticker_output_col += f"{position['ticker']}\n"
             share_delta_output_col += concatenate_share_delta(position)
 
-        result = client.chat_postMessage(
+        if ((diff['share_delta'] != 0).all() and (diff['pct_change'] == 0).all()):
+            return client.chat_postMessage(
+                channel=slack_channel['id'],
+                text="MSOS Holding Changes",
+                blocks=[
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"Holdings file not updated for {format_date(previous_trading_day)} to {format_date(now)}. <{MSOS_HOLDINGS_CSV_URL}|Source>"
+                        }
+                    }
+                ]
+            )
+
+        return client.chat_postMessage(
             channel=slack_channel['id'],
             text="MSOS Holding Changes",
             blocks=[
-                 {
-                     "type": "header",
-                     "text": {
-                         "type": "plain_text",
-                         "text": f"MSOS Holdings\nChanges from {format_date(previous_trading_day)} to {format_date(now)}"
-                     }
-                 },
                 {
-                     "type": "divider"
-                 },
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": f"MSOS Holdings\nChanges from {format_date(previous_trading_day)} to {format_date(now)}"
+                    }
+                },
+                {
+                    "type": "divider"
+                },
                 {
                     "type": "section",
                     "fields": [
@@ -93,10 +108,10 @@ def post_message_to_slack(diff):
                         }
 
                     ]
-                 },
+                },
                 {
-                     "type": "divider"
-                 },
+                    "type": "divider"
+                },
                 {
                     "type": "section",
                     "fields": [
@@ -109,16 +124,16 @@ def post_message_to_slack(diff):
                             "text": f'${cash_dollars} ({cash_pct})'
                         }
                     ]
-                 },
+                },
                 {
-                     "type": "context",
-                     "elements": [
-                         {
-                             "type": "mrkdwn",
-                             "text": f"<{MSOS_HOLDINGS_CSV_URL}|Source>"
-                         }
-                     ]
-                 }
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": f"<{MSOS_HOLDINGS_CSV_URL}|Source>"
+                        }
+                    ]
+                }
             ]
         )
     except SlackApiError as slackError:

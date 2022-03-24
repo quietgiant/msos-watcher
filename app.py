@@ -46,7 +46,7 @@ def post_message_to_slack(diff):
         previous_trading_day = get_previous_trading_day(now)
         ticker_output_col = ""
         share_delta_output_col = ""
-        diff = diff.sort_values('share_delta', ascending=False)
+        diff = diff.sort_values(['share_delta', 'weight'], ascending=[False, False])
         blackrock_trust = diff.query('ticker == "BLACKROCK TREASURY TRUST INSTL 62"').iloc[0]
         cash = diff.query('ticker == "CASH"').iloc[0]
         cash_dollars = blackrock_trust['shares'] + cash['shares']

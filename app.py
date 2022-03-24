@@ -47,9 +47,10 @@ def post_message_to_slack(diff):
         ticker_output_col = ""
         share_delta_output_col = ""
         diff = diff.sort_values('share_delta', ascending=False)
-        cash = diff.query('ticker == "BLACKROCK TREASURY TRUST INSTL 62"').iloc[0]
-        cash_pct = cash['weight']
-        cash_dollars = cash['shares']
+        blackrock_trust = diff.query('ticker == "BLACKROCK TREASURY TRUST INSTL 62"').iloc[0]
+        cash = diff.query('ticker == "CASH"').iloc[0]
+        cash_dollars = blackrock_trust['shares'] + cash['shares']
+        cash_pct = blackrock_trust['weight'] + cash['weight']
 
         for (index, position) in diff.iterrows():
             if (position['ticker'] in CASH_TICKERS):
@@ -121,7 +122,7 @@ def post_message_to_slack(diff):
                         },
                         {
                             "type": "mrkdwn",
-                            "text": f'${cash_dollars} ({cash_pct})'
+                            "text": f'{money_str(cash_dollars)} ({"{0:.2%}".format(cash_pct)})'
                         }
                     ]
                 },
@@ -150,15 +151,14 @@ def update_holdings():
         row = {
             "date": today_date,
             "ticker": ticker,
-            "shares": position["Shares/Par (Full)"],
-            "price": position["Price (Base)"],
-            "value": position["Traded Market Value (Base)"],
-            "weight": position["Portfolio Weight %"]
+            "shares": format_float_db(position["Shares/Par (Full)"]),
+            "price": format_float_db(position["Price (Base)"]),
+            "value": format_float_db(position["Traded Market Value (Base)"]),
+            "weight": format_pct_db(position["Portfolio Weight %"])
         }
         data = json.loads(json.dumps(row), parse_float=Decimal)
-        if valid_row(data):
-            print(data)
-            write(data)
+        print(data)
+        write(data)
 
 
 def calculate_deltas():
@@ -180,8 +180,7 @@ def calculate_deltas():
         share_delta = calculate_share_delta(current_position, previous_position)
         pct_change = 0
         if (current_position != 0 and previous_position != 0):
-            pct_change = (float(format_shares_float(
-                current_position['shares'])) / float(format_shares_float(previous_position['shares']))) - 1
+            pct_change = (current_position['shares'] / previous_position['shares']) - 1
         weight = current_position['weight']
         shares = current_position['shares']
         deltas.append([ticker, share_delta, pct_change, weight, shares])
@@ -189,10 +188,10 @@ def calculate_deltas():
 
 
 def calculate_share_delta(current_position, previous_position):
-    current_shares = float(format_shares_float(current_position['shares']))
+    current_shares = current_position['shares']
     previous_shares = 0
     if (previous_position):
-        previous_shares = float(format_shares_float(previous_position['shares']))
+        previous_shares = previous_position['shares']
     return current_shares - previous_shares
 
 
@@ -228,13 +227,6 @@ def pct_str(s):
     return f"{status}{result}%"
 
 
-def format_shares_float(shares):
-    replacement_chars = [",", "(", ")"]
-    for c in replacement_chars:
-        shares = shares.replace(c, "")
-    return shares
-
-
 def get_distinct_tickers(holdings):
     tickers = []
     for position in holdings:
@@ -264,6 +256,23 @@ def format_date(date):
     return datetime.strftime(date, '%-m/%-d/%Y')
 
 
+def format_float_db(data):
+    if isinstance(data, float):
+        return data
+    result = data.replace(",", "").strip()
+    if ("(" in result and ")" in result):
+        result = result.replace("(", "")
+        result = result.replace(")", "")
+        result = f"-{result}"
+    return float(result)
+
+
+def format_pct_db(data):
+    result = data.replace("%", "")
+    result = round(float(result) / 100, 5)
+    return result
+
+
 def get_now_est():
     est = pytz.timezone('EST')
     return datetime.now(est)
@@ -272,10 +281,6 @@ def get_now_est():
 def get_ticker(row):
     ticker = str(row["Stock Ticker"]).strip()
     return ticker if ticker != "" and ticker != "nan" else row["Security Description"]
-
-
-def valid_row(row):
-    return '-' not in row['shares']
 
 
 def print_all():

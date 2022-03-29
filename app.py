@@ -32,7 +32,7 @@ def handler(event, context):
 
 
 def main():
-    update_holdings()
+    # update_holdings()
     diff = calculate_deltas()
     _ = post_message_to_slack(diff)
 
@@ -274,8 +274,11 @@ def format_pct_db(data):
 
 
 def get_now_est():
-    est = pytz.timezone('EST')
-    return datetime.now(est)
+    now = datetime.now(pytz.timezone('EST'))
+    time_8pm_est_hour = 19
+    if now.hour < time_8pm_est_hour:
+        now = now - timedelta(days=1)
+    return now
 
 
 def get_ticker(row):

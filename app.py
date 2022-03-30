@@ -32,7 +32,7 @@ def handler(event, context):
 
 
 def main():
-    # update_holdings()
+    update_holdings()
     diff = calculate_deltas()
     _ = post_message_to_slack(diff)
 

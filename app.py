@@ -26,6 +26,9 @@ CASH_TICKERS = [
     "BLACKROCK TREASURY TRUST INSTL 62",
     "X9USDBLYT"
 ]
+HOLIDAYS = [
+    "4/15/2022"
+]
 
 
 def handler(event, context):
@@ -248,9 +251,13 @@ def get_holdings_for_dates(day1, day2):
 def get_previous_trading_day(date):
     previous_trading_day = date - timedelta(days=1)
     friday_week_index = 4
-    while datetime.weekday(previous_trading_day) > friday_week_index:
+    while datetime.weekday(previous_trading_day) > friday_week_index or is_holiday(previous_trading_day):
         previous_trading_day = previous_trading_day - timedelta(days=1)
     return previous_trading_day
+
+
+def is_holiday(date):
+    return format_date(date) in HOLIDAYS
 
 
 def format_date(date):

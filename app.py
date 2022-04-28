@@ -37,7 +37,7 @@ def handler(event, context):
 
 
 def main():
-    # update_holdings()
+    update_holdings()
     diff = calculate_deltas()
     _ = post_message_to_slack(diff)
 
@@ -55,7 +55,6 @@ def post_message_to_slack(diff):
         blackrock_trust = diff.query(f"ticker == \"{BLACKROCK_TICKER}\"").iloc[0]
         cash = diff.query(f"ticker == \"{CASH_TICKER}\"").iloc[0]
         cash_dollars = blackrock_trust['shares'] + cash['shares']
-        cash_pct = blackrock_trust['weight'] + cash['weight']
 
         for (index, position) in diff.iterrows():
             if (position['ticker'] in CASH_TICKERS):
@@ -127,7 +126,7 @@ def post_message_to_slack(diff):
                         },
                         {
                             "type": "mrkdwn",
-                            "text": f'{money_str(cash_dollars)} ({"{0:.2%}".format(cash_pct)})'
+                            "text": f"{money_str(cash_dollars)}"
                         }
                     ]
                 },

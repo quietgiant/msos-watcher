@@ -21,10 +21,11 @@ TABLE_NAME = "Holdings"
 SLACK_TARGET_CHANNEL_NAME = "msos-watcher"
 SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
 
+CASH_TICKER = "CASH"
+BLACKROCK_TICKER = "X9USDBLYT"
 CASH_TICKERS = [
-    "CASH",
-    "BLACKROCK TREASURY TRUST INSTL 62",
-    "X9USDBLYT"
+    CASH_TICKER,
+    BLACKROCK_TICKER
 ]
 HOLIDAYS = [
     "4/15/2022"
@@ -36,7 +37,7 @@ def handler(event, context):
 
 
 def main():
-    update_holdings()
+    # update_holdings()
     diff = calculate_deltas()
     _ = post_message_to_slack(diff)
 
@@ -51,8 +52,8 @@ def post_message_to_slack(diff):
         ticker_output_col = ""
         share_delta_output_col = ""
         diff = diff.sort_values(['share_delta', 'weight'], ascending=[False, False])
-        blackrock_trust = diff.query('ticker == "BLACKROCK TREASURY TRUST INSTL 62"').iloc[0]
-        cash = diff.query('ticker == "CASH"').iloc[0]
+        blackrock_trust = diff.query(f"ticker == \"{BLACKROCK_TICKER}\"").iloc[0]
+        cash = diff.query(f"ticker == \"{CASH_TICKER}\"").iloc[0]
         cash_dollars = blackrock_trust['shares'] + cash['shares']
         cash_pct = blackrock_trust['weight'] + cash['weight']
 

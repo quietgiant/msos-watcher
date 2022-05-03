@@ -22,10 +22,12 @@ SLACK_TARGET_CHANNEL_NAME = "msos-watcher"
 SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
 
 CASH_TICKER = "CASH"
-BLACKROCK_TICKER = "X9USDBLYT"
+BLACKROCK_TRUST_TICKER = "BLACKROCK TREASURY TRUST INSTL 62"
+BLACKROCK_USD_TICKER = "X9USDBLYT"
 CASH_TICKERS = [
     CASH_TICKER,
-    BLACKROCK_TICKER
+    BLACKROCK_USD_TICKER,
+    BLACKROCK_TRUST_TICKER
 ]
 HOLIDAYS = [
     "4/15/2022"
@@ -52,7 +54,7 @@ def post_message_to_slack(diff):
         ticker_output_col = ""
         share_delta_output_col = ""
         diff = diff.sort_values(['share_delta', 'weight'], ascending=[False, False])
-        blackrock_trust = diff.query(f"ticker == \"{BLACKROCK_TICKER}\"").iloc[0]
+        blackrock_trust = get_blackrock_ticker(diff)
         cash = diff.query(f"ticker == \"{CASH_TICKER}\"").iloc[0]
         cash_dollars = blackrock_trust['shares'] + cash['shares']
 
@@ -229,6 +231,13 @@ def pct_str(s):
     if result > 0:
         status = '+'
     return f"{status}{result}%"
+
+
+def get_blackrock_ticker(diff):
+    try:
+        return diff.query(f"ticker == \"{BLACKROCK_TRUST_TICKER}\"").iloc[0]
+    except:
+        return diff.query(f"ticker == \"{BLACKROCK_USD_TICKER}\"").iloc[0]
 
 
 def get_distinct_tickers(holdings):

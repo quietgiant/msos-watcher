@@ -10,6 +10,7 @@ try:
     from slack_sdk import WebClient
     from slack_sdk.errors import SlackApiError
     from dotenv import load_dotenv
+    import pandas_market_calendars as market_calendar
 except Exception as ex:
     print("Error Imports : {} ".format(ex))
 
@@ -24,13 +25,12 @@ SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
 CASH_TICKER = "CASH"
 BLACKROCK_TRUST_TICKER = "BLACKROCK TREASURY TRUST INSTL 62"
 BLACKROCK_USD_TICKER = "X9USDBLYT"
+DERIVATIVES_COLLATERAL_TICKER = "DERIVATIVES COLLATERAL"
 CASH_TICKERS = [
     CASH_TICKER,
     BLACKROCK_USD_TICKER,
-    BLACKROCK_TRUST_TICKER
-]
-HOLIDAYS = [
-    "4/15/2022"
+    BLACKROCK_TRUST_TICKER,
+    DERIVATIVES_COLLATERAL_TICKER
 ]
 
 
@@ -39,6 +39,8 @@ def handler(event, context):
 
 
 def main():
+    if is_holiday(get_now_est()):
+        quit()
     update_holdings()
     diff = calculate_deltas()
     _ = post_message_to_slack(diff)
@@ -266,7 +268,10 @@ def get_previous_trading_day(date):
 
 
 def is_holiday(date):
-    return format_date(date) in HOLIDAYS
+    nyse = market_calendar.get_calendar('NYSE')
+    holidays = [str(h) for h in nyse.holidays().holidays]
+    today_formatted = datetime.strftime(date, '%Y-%m-%d')
+    return today_formatted in holidays
 
 
 def format_date(date):
@@ -292,9 +297,9 @@ def format_pct_db(data):
 
 def get_now_est():
     now = datetime.now(pytz.timezone('EST'))
-    time_8pm_est_hour = 19
-    if now.hour < time_8pm_est_hour:
-        now = now - timedelta(days=1)
+    # time_8pm_est_hour = 19
+    # if now.hour < time_8pm_est_hour:
+    # now = now - timedelta(days=1)
     return now
 
 

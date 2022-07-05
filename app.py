@@ -40,7 +40,8 @@ def handler(event, context):
 
 def main():
     if is_holiday(get_now_est()):
-        quit(0)
+        print("Holiday detected, exiting...")
+        exit(0)
     update_holdings()
     diff = calculate_deltas()
     _ = post_message_to_slack(diff)

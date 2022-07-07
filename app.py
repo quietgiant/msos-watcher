@@ -59,7 +59,8 @@ def post_message_to_slack(diff):
         diff = diff.sort_values(['share_delta', 'weight'], ascending=[False, False])
         blackrock_trust = get_blackrock_ticker(diff)
         cash = diff.query(f"ticker == \"{CASH_TICKER}\"").iloc[0]
-        cash_dollars = blackrock_trust['shares'] + cash['shares']
+        derivatives_collateral = diff.query(f"ticker == \"{DERIVATIVES_COLLATERAL_TICKER}\"").iloc[0]
+        cash_dollars = blackrock_trust['shares'] + cash['shares'] + derivatives_collateral['shares']
 
         for (index, position) in diff.iterrows():
             if (position['ticker'] in CASH_TICKERS):

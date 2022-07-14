@@ -25,12 +25,14 @@ SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
 CASH_TICKER = "CASH"
 BLACKROCK_TRUST_TICKER = "BLACKROCK TREASURY TRUST INSTL 62"
 BLACKROCK_USD_TICKER = "X9USDBLYT"
-DERIVATIVES_COLLATERAL_TICKER = "DERIVATIVES COLLATERAL"
+DERIVATIVES_COLLATERAL_TICKER = "DERIVATIVES_COLLATERAL"
+DERIVATIVES_COLLATERAL_WEIRD_TICKER = "9999FWD$M"
 CASH_TICKERS = [
     CASH_TICKER,
     BLACKROCK_USD_TICKER,
     BLACKROCK_TRUST_TICKER,
-    DERIVATIVES_COLLATERAL_TICKER
+    DERIVATIVES_COLLATERAL_TICKER,
+    DERIVATIVES_COLLATERAL_WEIRD_TICKER
 ]
 
 
@@ -59,7 +61,7 @@ def post_message_to_slack(diff):
         diff = diff.sort_values(['share_delta', 'weight'], ascending=[False, False])
         blackrock_trust = get_blackrock_ticker(diff)
         cash = diff.query(f"ticker == \"{CASH_TICKER}\"").iloc[0]
-        derivatives_collateral = diff.query(f"ticker == \"{DERIVATIVES_COLLATERAL_TICKER}\"").iloc[0]
+        derivatives_collateral = get_derivatives_collateral_ticker(diff)
         cash_dollars = blackrock_trust['shares'] + cash['shares'] + derivatives_collateral['shares']
 
         for (index, position) in diff.iterrows():
@@ -242,6 +244,13 @@ def get_blackrock_ticker(diff):
         return diff.query(f"ticker == \"{BLACKROCK_TRUST_TICKER}\"").iloc[0]
     except:
         return diff.query(f"ticker == \"{BLACKROCK_USD_TICKER}\"").iloc[0]
+
+
+def get_derivatives_collateral_ticker(diff):
+    try:
+        return diff.query(f"ticker == \"{DERIVATIVES_COLLATERAL_TICKER}\"").iloc[0]
+    except:
+        return diff.query(f"ticker == \"{DERIVATIVES_COLLATERAL_WEIRD_TICKER}\"").iloc[0]
 
 
 def get_distinct_tickers(holdings):

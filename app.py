@@ -25,7 +25,7 @@ SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
 CASH_TICKER = "CASH"
 BLACKROCK_TRUST_TICKER = "BLACKROCK TREASURY TRUST INSTL 62"
 BLACKROCK_USD_TICKER = "X9USDBLYT"
-DERIVATIVES_COLLATERAL_TICKER = "DERIVATIVES_COLLATERAL"
+DERIVATIVES_COLLATERAL_TICKER = "DERIVATIVES COLLATERAL"
 DERIVATIVES_COLLATERAL_WEIRD_TICKER = "9999FWD$M"
 CASH_TICKERS = [
     CASH_TICKER,
@@ -44,7 +44,7 @@ def main():
     if is_holiday(get_now_est()):
         print("Holiday detected, exiting...")
         return
-    update_holdings()
+    # update_holdings()
     diff = calculate_deltas()
     _ = post_message_to_slack(diff)
 
@@ -66,6 +66,7 @@ def post_message_to_slack(diff):
 
         for (index, position) in diff.iterrows():
             if (position['ticker'] in CASH_TICKERS):
+                print(position['ticker'])
                 diff.drop(index, inplace=True)
                 continue
             ticker_output_col += f"{position['ticker']}\n"

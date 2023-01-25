@@ -59,6 +59,7 @@ def post_message_to_slack(diff):
         ticker_output_col = ""
         share_delta_output_col = ""
         diff = diff.sort_values(['share_delta', 'weight'], ascending=[False, False])
+        print(diff)
         blackrock_trust = get_blackrock_ticker(diff)
         cash = diff.query(f"ticker == \"{CASH_TICKER}\"").iloc[0]
         derivatives_collateral = get_derivatives_collateral_ticker(diff)
@@ -66,7 +67,6 @@ def post_message_to_slack(diff):
 
         for (index, position) in diff.iterrows():
             if (position['ticker'] in CASH_TICKERS):
-                print(position['ticker'])
                 diff.drop(index, inplace=True)
                 continue
             ticker_output_col += f"{position['ticker']}\n"
@@ -180,6 +180,8 @@ def calculate_deltas():
 
     holdings = get_holdings_for_dates(now, previous_trading_day)
     tickers = get_distinct_tickers(holdings)
+    if len(holdings) == 0 or len(tickers) == 0:
+        print("WARNING: no deltas to copmute")
     deltas = []
     for ticker in tickers:
         position_deltas = [h for h in holdings if h['ticker'] == ticker]
@@ -287,7 +289,7 @@ def is_holiday(date):
 
 
 def format_date(date):
-    return datetime.strftime(date, '%-m/%-d/%Y')
+    return datetime.strftime(date, '%m/%d/%Y')
 
 
 def format_float_db(data):

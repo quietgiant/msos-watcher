@@ -26,13 +26,15 @@ CASH_TICKER = "CASH"
 BLACKROCK_TRUST_TICKER = "BLACKROCK TREASURY TRUST INSTL 62"
 BLACKROCK_USD_TICKER = "X9USDBLYT"
 DERIVATIVES_COLLATERAL_TICKER = "DERIVATIVES COLLATERAL"
-DERIVATIVES_COLLATERAL_WEIRD_TICKER = "9999FWD$M"
+DERIVATIVES_COLLATERAL_NOMURA = "DERIVATIVES COLLATERAL NOMURA"
+DERIVATIVES_COLLATERAL_CLEARSTREET = "DERIVATIVES COLLATERAL CLEARSTREET"
 CASH_TICKERS = [
     CASH_TICKER,
     BLACKROCK_USD_TICKER,
     BLACKROCK_TRUST_TICKER,
     DERIVATIVES_COLLATERAL_TICKER,
-    DERIVATIVES_COLLATERAL_WEIRD_TICKER
+    DERIVATIVES_COLLATERAL_NOMURA,
+    DERIVATIVES_COLLATERAL_CLEARSTREET
 ]
 
 
@@ -44,7 +46,7 @@ def main():
     if is_holiday(get_now_est()):
         print("Holiday detected, exiting...")
         return
-    update_holdings()
+    # update_holdings()
     diff = calculate_deltas()
     _ = post_message_to_slack(diff)
 
@@ -250,10 +252,9 @@ def get_blackrock_ticker(diff):
 
 
 def get_derivatives_collateral_ticker(diff):
-    try:
-        return diff.query(f"ticker == \"{DERIVATIVES_COLLATERAL_TICKER}\"").iloc[0]
-    except:
-        return diff.query(f"ticker == \"{DERIVATIVES_COLLATERAL_WEIRD_TICKER}\"").iloc[0]
+    regex = 'DERIVATIVES COLLATERAL*'
+    matches = diff[diff.ticker.str.match(regex)]
+    return matches.sum(axis=0)
 
 
 def get_distinct_tickers(holdings):
